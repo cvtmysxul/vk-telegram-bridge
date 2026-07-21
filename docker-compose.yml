@@ -1,0 +1,28 @@
+services:
+  bot:
+    image: ${BOT_IMAGE:-vk-telegram-bridge:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+  sticker-sync:
+    profiles: ["tools"]
+    image: ${STICKER_TOOLS_IMAGE:-vk-telegram-bridge-sticker-tools:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: sticker-tools
+    env_file: .env
+    restart: "no"
+    volumes:
+      - ./sticker-pack-candidates.json:/app/sticker-pack-candidates.json:ro
+      - ./sticker-pack-candidates.discovered.json:/app/sticker-pack-candidates.discovered.json
+      - ./sticker-mapping.json:/app/sticker-mapping.json
+      - sticker-cache:/app/.cache
+
+volumes:
+  sticker-cache:

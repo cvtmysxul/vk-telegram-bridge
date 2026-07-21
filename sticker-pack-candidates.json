@@ -1,0 +1,167 @@
+[
+  { "vkProductId": 1379, "vkTitle": "Бака Акио", "telegramSetNames": ["bakaakio_vk"] },
+  { "vkProductId": 1432, "vkTitle": "Ливси", "telegramSetNames": ["livsi_vk"] },
+  { "vkProductId": 10230, "vkTitle": "Ваша Мамаша", "telegramSetNames": ["BS_your_mama"] },
+  { "vkProductId": 1594, "vkTitle": "Тёплые Обнимышки", "telegramSetNames": ["warmmicehugs_vk"] },
+  { "vkProductId": 2118, "vkTitle": "Паучок Пряник", "telegramSetNames": ["BS_pryanikthespider"] },
+  { "vkProductId": 1040, "vkTitle": "Нутри", "telegramSetNames": ["nutri_vk"] },
+  { "vkProductId": 2002, "vkTitle": "Карина", "telegramSetNames": ["karina_vk"] },
+  { "vkProductId": 1886, "vkTitle": "Ванилька", "telegramSetNames": ["vanilla_vk"] },
+  { "vkProductId": 2190, "vkTitle": "СберКот на чиле весь год", "telegramSetNames": ["sbercat_chilling"] },
+  { "vkProductId": 1983, "vkTitle": "Блинец", "telegramSetNames": ["blinetz_vk"] },
+  { "vkProductId": 1788, "vkTitle": "Мари и Хидэ", "telegramSetNames": ["mariandhide_vk"] },
+  { "vkProductId": 3, "vkTitle": "Смайлы", "telegramSetNames": ["vk_smiles"] },
+  { "vkProductId": 1835, "vkTitle": "Астерия", "telegramSetNames": ["asteria_vk"] },
+  { "vkProductId": 1843, "vkTitle": "Владик", "telegramSetNames": ["vladik_vk"] },
+  { "vkProductId": 1542, "vkTitle": "Булькс", "telegramSetNames": ["bloop_vk"] },
+  { "vkProductId": 1825, "vkTitle": "Маф", "telegramSetNames": ["muff_vk"] },
+  { "vkProductId": 1528, "vkTitle": "Тоши", "telegramSetNames": ["toshi_vk"] },
+  { "vkProductId": 1799, "vkTitle": "Малиновый Джем", "telegramSetNames": ["malinjam_vk"] },
+  { "vkProductId": 1785, "vkTitle": "Крис и Кристина", "telegramSetNames": ["krisandkristina"] },
+  { "vkProductId": 1878, "vkTitle": "СберКот-инфлюенсер", "telegramSetNames": ["sbercat_influencer_vk", "SberCat_influencer"] },
+  { "vkProductId": 1467, "vkTitle": "Дьявол и Дьяволица", "telegramSetNames": ["BS_devilanddemoness"] },
+  { "vkProductId": 1809, "vkTitle": "СберКотоВёрс", "telegramSetNames": ["sbercat_in_the_catverse"] },
+  { "vkProductId": 1714, "vkTitle": "КатШи", "telegramSetNames": ["KatShi_vk"] },
+  { "vkProductId": 1, "vkTitle": "Спотти", "telegramSetNames": ["spotty_vk"] },
+  { "vkProductId": 1679, "vkTitle": "Анимированный Спотти", "telegramSetNames": ["SpottyAnimated"] },
+  {
+    "vkProductId": 1536,
+    "vkTitle": "Минто",
+    "telegramSetNames": ["minty_vk", "minty2_vk"],
+    "segments": [
+      { "telegramSetName": "minty_vk", "vkStart": 0, "telegramStart": 0, "count": 48 },
+      { "telegramSetName": "minty2_vk", "vkStart": 48, "telegramStart": 49, "count": 2 }
+    ]
+  },
+  { "vkProductId": 1334, "vkTitle": "Сакура", "telegramSetNames": ["sakura_redpanda_vk"] },
+  {
+    "vkProductId": 1515,
+    "vkTitle": "СберКот. Больше, чем кот!",
+    "telegramSetNames": ["moresbercat_vk", "moresbercat_2"],
+    "segments": [
+      { "telegramSetName": "moresbercat_vk", "vkStart": 0, "telegramStart": 0, "count": 46 },
+      { "telegramSetName": "moresbercat_2", "vkStart": 46, "telegramStart": 0, "count": 18 }
+    ]
+  },
+  { "vkProductId": 2, "vkTitle": "Персик", "telegramSetNames": ["persik_by_vk"] },
+  { "vkProductId": 1042, "vkTitle": "Серый Персик", "telegramSetNames": ["gray_persik_vk", "persikhd"] },
+  { "vkProductId": 1408, "vkTitle": "Экви", "telegramSetNames": ["ekvi_vk"] },
+  { "vkProductId": 1189, "vkTitle": "VALORANT", "telegramSetNames": ["valorant_vk"] },
+  { "vkProductId": 552, "vkTitle": "Фантомий", "telegramSetNames": ["phantomghost_vk", "ghostphantom", "fantom_vk"] },
+  { "vkProductId": 279, "vkTitle": "Emoji-стикеры", "telegramSetNames": ["EmojiSmilesStickersSave"] },
+  { "vkProductId": 75, "vkTitle": "Всемирный фонд природы", "telegramSetNames": ["wwf_animals_vk"] },
+  { "vkProductId": 148, "vkTitle": "#ПушкинНашеВсё", "telegramSetNames": ["pushkin_vk"] },
+  { "vkProductId": 4, "vkTitle": "Фруктовощи", "telegramSetNames": ["fruitables_vk"] },
+  { "vkProductId": 248, "vkTitle": "Кралечка", "telegramSetNames": ["kralechka_vk"] },
+  { "vkProductId": 256, "vkTitle": "Акулыч", "telegramSetNames": ["shark_vk"] },
+  { "vkProductId": 319, "vkTitle": "Полицейский с Рублёвки", "telegramSetNames": ["ruble_cop"] },
+  { "vkProductId": 378, "vkTitle": "Уфо", "telegramSetNames": ["ufo_vk"] },
+  { "vkProductId": 383, "vkTitle": "Пасхальные друзья", "telegramSetNames": ["pasha_vk"] },
+  { "vkProductId": 413, "vkTitle": "Тупая Клубника", "telegramSetNames": ["stawberry_vk"] },
+  { "vkProductId": 1162, "vkTitle": "Мими", "telegramSetNames": ["mimivk"] },
+  { "vkProductId": 1173, "vkTitle": "Нежная Пиби", "telegramSetNames": ["pibilove_vk"] },
+  { "vkProductId": 1220, "vkTitle": "Парад планет", "telegramSetNames": ["planeti_vk"] },
+  { "vkProductId": 1259, "vkTitle": "Гусь — за мат кусь!", "telegramSetNames": ["politegoose"] },
+  { "vkProductId": 1261, "vkTitle": "Приличный Пингвин", "telegramSetNames": ["properpenguin"] },
+  { "vkProductId": 1262, "vkTitle": "Прыгунчик Хулио", "telegramSetNames": ["julioshrew"] },
+  { "vkProductId": 1263, "vkTitle": "Хома Сапиенс", "telegramSetNames": ["hammysapiens"] },
+  { "vkProductId": 1300, "vkTitle": "Братья Хвостики: Эник и Беник", "telegramSetNames": ["eenymeeny"] },
+  {
+    "vkProductId": 1791,
+    "vkTitle": "Ботя",
+    "telegramSetNames": ["botyaandryk_vk"],
+    "segments": [
+      { "telegramSetName": "botyaandryk_vk", "vkStart": 0, "telegramStart": 0, "count": 24 },
+      { "telegramSetName": "botyaandryk_vk", "vkStart": 24, "telegramStart": 48, "count": 12 }
+    ]
+  },
+  {
+    "vkProductId": 1792,
+    "vkTitle": "Рюк",
+    "telegramSetNames": ["botyaandryk_vk"],
+    "segments": [
+      { "telegramSetName": "botyaandryk_vk", "vkStart": 0, "telegramStart": 24, "count": 24 },
+      { "telegramSetName": "botyaandryk_vk", "vkStart": 24, "telegramStart": 60, "count": 12 }
+    ]
+  },
+  { "vkProductId": 1177, "vkTitle": "Рамзес и Клео", "telegramSetNames": ["ramesses_and_cleo"] },
+  { "vkProductId": 10544, "vkTitle": "Рамзес и Клео 2.0", "telegramSetNames": ["ramessesandcleo2"] },
+  { "vkProductId": 1457, "vkTitle": "Чи", "telegramSetNames": ["shi_vk"] },
+  { "vkProductId": 10482, "vkTitle": "Чи-Чи", "telegramSetNames": ["chichi_vk"] },
+  { "vkProductId": 1486, "vkTitle": "Мари", "telegramSetNames": ["mary_vk"] },
+  { "vkProductId": 1889, "vkTitle": "Мари и Хидэ: Медовый месяц", "telegramSetNames": ["mary_hide_honeymoonvk"] },
+  { "vkProductId": 1691, "vkTitle": "Лилит", "telegramSetNames": ["lilith_vk"] },
+  { "vkProductId": 10261, "vkTitle": "Лилит 2", "telegramSetNames": ["lilith2_vk"] },
+  { "vkProductId": 1814, "vkTitle": "Найс", "telegramSetNames": ["nice_vk"] },
+  { "vkProductId": 1921, "vkTitle": "Найс и Мистер Квартирный Крыс", "telegramSetNames": ["niceandrat_vk"] },
+  { "vkProductId": 1850, "vkTitle": "Кроко", "telegramSetNames": ["croco_vk"] },
+  { "vkProductId": 10417, "vkTitle": "Кроко 2.0", "telegramSetNames": ["croco2_vk"] },
+  { "vkProductId": 1635, "vkTitle": "Кисулькенс Лапкин", "telegramSetNames": ["kisulkensvk"] },
+  { "vkProductId": 1669, "vkTitle": "Go! Dango!", "telegramSetNames": ["godango_vk"] },
+  { "vkProductId": 1753, "vkTitle": "Преколер!", "telegramSetNames": ["prekoler_vk"] },
+  { "vkProductId": 2042, "vkTitle": "Мила", "telegramSetNames": ["mila_vk"] },
+  { "vkProductId": 2173, "vkTitle": "ТимаТомное настроение!", "telegramSetNames": ["thetinatonymood"] },
+  { "vkProductId": 10123, "vkTitle": "Нова", "telegramSetNames": ["nova_vk"] },
+  { "vkProductId": 10283, "vkTitle": "Полина Морозова", "telegramSetNames": ["polina_morozova_vk"] },
+  { "vkProductId": 10376, "vkTitle": "Осторожно, киберземляне!", "telegramSetNames": ["caution_cyberlings_vk"] },
+  { "vkProductId": 10519, "vkTitle": "Преколер! х Кроко", "telegramSetNames": ["prekoler_croco"] },
+  { "vkProductId": 10599, "vkTitle": "Нисик", "telegramSetNames": ["nisik_vk"] },
+  {
+    "vkProductId": 1956,
+    "vkTitle": "Стикерный алфавит",
+    "telegramSetNames": ["stickeralphabet"],
+    "segments": [
+      { "telegramSetName": "stickeralphabet", "vkStart": 0, "telegramStart": 0, "count": 33 },
+      { "telegramSetName": "stickeralphabet", "vkStart": 33, "telegramStart": 34, "count": 15 }
+    ]
+  },
+  {
+    "vkProductId": 10112,
+    "vkTitle": "Английский алфавит",
+    "telegramSetNames": ["stickeralphabet"],
+    "segments": [
+      { "telegramSetName": "stickeralphabet", "vkStart": 39, "telegramStart": 49, "count": 1 },
+      { "telegramSetName": "stickeralphabet", "vkStart": 0, "telegramStart": 50, "count": 39 },
+      { "telegramSetName": "stickeralphabet", "vkStart": 40, "telegramStart": 89, "count": 8 }
+    ]
+  },
+  { "vkProductId": 10332, "vkTitle": "Мир! Дружба! Жвачка!", "telegramSetNames": ["peace_love_gum"] },
+  { "vkProductId": 10339, "vkTitle": "Домовячьи радости с Финником!", "telegramSetNames": ["finnik_vk"] },
+  { "vkProductId": 181, "vkTitle": "Маленькое зло", "telegramSetNames": ["littleevil_vk"] },
+  { "vkProductId": 219, "vkTitle": "Тимоша", "telegramSetNames": ["timosha_vk"] },
+  { "vkProductId": 224, "vkTitle": "Подозрительная Сова", "telegramSetNames": ["suspiciousowl_by_vk"] },
+  { "vkProductId": 244, "vkTitle": "Лягуш", "telegramSetNames": ["vk_froggy"] },
+  { "vkProductId": 309, "vkTitle": "Пси-Кот", "telegramSetNames": ["psy_cat_vk"] },
+  { "vkProductId": 367, "vkTitle": "Авокадик", "telegramSetNames": ["avocadik"] },
+  { "vkProductId": 372, "vkTitle": "Бананос", "telegramSetNames": ["bananos_vk"] },
+  {
+    "vkProductId": 380,
+    "vkTitle": "Голубь Михаил",
+    "telegramSetNames": ["golubmihail"],
+    "segments": [
+      { "telegramSetName": "golubmihail", "vkStart": 0, "telegramStart": 1, "count": 34 },
+      { "telegramSetName": "golubmihail", "vkStart": 34, "telegramStart": 36, "count": 15 }
+    ]
+  },
+  { "vkProductId": 396, "vkTitle": "Миу-Мяу", "telegramSetNames": ["miu_miu_vk"] },
+  { "vkProductId": 10382, "vkTitle": "Бананяо +", "telegramSetNames": ["BS_banana_plus"] },
+  { "vkProductId": 10383, "vkTitle": "Мишка Михаил", "telegramSetNames": ["mikey_bear_vk"] },
+  { "vkProductId": 10450, "vkTitle": "Каламбуры", "telegramSetNames": ["punny_vk"] },
+  { "vkProductId": 10518, "vkTitle": "Тик-Так, Тик-Так", "telegramSetNames": ["hsr_tick_tock_vk"] },
+  { "vkProductId": 1136, "vkTitle": "Акио — помощник Санты", "telegramSetNames": ["akio_santa"] },
+  { "vkProductId": 1254, "vkTitle": "Вампир Ян", "telegramSetNames": ["vampireyan"] },
+  { "vkProductId": 1325, "vkTitle": "Паффи", "telegramSetNames": ["puffyvk"] },
+  { "vkProductId": 10561, "vkTitle": "Волчара", "telegramSetNames": ["loyal_wolf_vk"] },
+  { "vkProductId": 1778, "vkTitle": "Флоренс", "telegramSetNames": ["florens_vk"] },
+  {
+    "vkProductId": 6,
+    "vkTitle": "Футбол 2014",
+    "telegramSetNames": ["VK_football"],
+    "segments": [
+      { "telegramSetName": "VK_football", "vkStart": 0, "telegramStart": 0, "count": 9 },
+      { "telegramSetName": "VK_football", "vkStart": 9, "telegramStart": 10, "count": 12 },
+      { "telegramSetName": "VK_football", "vkStart": 21, "telegramStart": 23, "count": 3 }
+    ]
+  },
+  { "vkProductId": 154, "vkTitle": "VK Mobile", "telegramSetNames": ["vk_mobile"] }
+]

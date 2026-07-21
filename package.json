@@ -1,0 +1,55 @@
+{
+  "name": "vk-telegram-topic-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synchronizes VK dialogs with Telegram Forum topics.",
+  "license": "MIT",
+  "keywords": [
+    "telegram",
+    "vk",
+    "bridge",
+    "forum-topics"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/security-regressions.test.mjs",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "stickers:discover": "node scripts/discover-sticker-packs.mjs",
+    "stickers:sync": "node scripts/sync-sticker-map.mjs",
+    "stickers:refresh": "node scripts/refresh-sticker-map.mjs",
+    "telegram:login": "tsx src/telegram/createUserSession.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.13.1",
+    "telegram": "^2.26.22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/pg": "^8.11.11",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "scripts",
+    "sticker-mapping.json",
+    "sticker-pack-candidates.json",
+    "sticker-pack-candidates.discovered.json",
+    ".env.example",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ]
+}
