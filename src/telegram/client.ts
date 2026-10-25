@@ -154,7 +154,31 @@ export class TelegramClient {
   }
 
   async sendPhoto(input: SendFile): Promise<TelegramMessage> {
-    return this.sendMultipart("sendPhoto", "photo", input);
+    try {
+      return await this.sendMultipart("sendPhoto", "photo", input);
+    } catch (error) {
+      // Only retry a definitive URL-fetch rejection, never an ambiguous send failure.
+      if (
+        typeof input.file !== "string" ||
+        !/^https?:\/\//i.test(input.file) ||
+        !(error instanceof Error) ||
+        !/^Telegram sendPhoto failed: 400 .*failed to get HTTP URL content/i.test(error.message)
+      ) {
+        throw error;
+      }
+      const response = await fetchTelegramResource(input.file, config.runtime.mediaTimeoutMs);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`Photo download failed: HTTP ${response.status}`, { cause: error });
+      }
+      const buffer = await readResponseBodyWithinLimit(response, Math.min(config.media.maxDownloadBytes, 10 * 1024 * 1024));
+      return this.sendMultipart("sendPhoto", "photo", {
+        ...input,
+        file: buffer,
+        filename: input.filename || "photo.jpg",
+        mimeType: input.mimeType || response.headers.get("content-type")?.split(";")[0] || "image/jpeg"
+      });
+    }
   }
 
   async sendVideo(input: SendFile): Promise<TelegramMessage> {

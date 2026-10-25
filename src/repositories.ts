@@ -529,6 +529,31 @@ export async function deleteTopicInfoMessages(vkPeerId: number, kind: TopicInfoM
     .where(and(eq(topicInfoMessages.vkPeerId, vkPeerId), eq(topicInfoMessages.kind, kind)));
 }
 
+export async function replaceTopicInfoMessages(
+  vkPeerId: number,
+  kind: TopicInfoMessageKind,
+  messages: TopicInfoMessageRecord[]
+): Promise<void> {
+  await db.transaction(async (transaction) => {
+    await transaction
+      .delete(topicInfoMessages)
+      .where(and(eq(topicInfoMessages.vkPeerId, vkPeerId), eq(topicInfoMessages.kind, kind)));
+
+    if (!messages.length) return;
+    await transaction.insert(topicInfoMessages).values(
+      messages.map((message) => ({
+        vkPeerId: message.vkPeerId,
+        kind: message.kind,
+        telegramChatId: message.telegramChatId,
+        telegramMessageId: message.telegramMessageId,
+        telegramThreadId: message.telegramThreadId,
+        snapshot: message.snapshot,
+        updatedAt: sql`now()`
+      }))
+    );
+  });
+}
+
 export async function isTopicInfoMessage(telegramChatId: number, telegramMessageId: number): Promise<boolean> {
   const [row] = await db
     .select({ id: topicInfoMessages.id })

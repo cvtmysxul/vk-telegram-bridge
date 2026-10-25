@@ -59,7 +59,13 @@ import {
   sleep,
   truncate
 } from "../util.js";
-import { isVkStickerUnavailableError, VkAttachmentPresentation, VkClient, VkReactedPeers } from "../vk/client.js";
+import {
+  isVkFloodControlError,
+  isVkStickerUnavailableError,
+  VkAttachmentPresentation,
+  VkClient,
+  VkReactedPeers
+} from "../vk/client.js";
 import { LogService } from "./logService.js";
 import { StickerMapper } from "./stickerMapper.js";
 import { TopicService } from "./topicService.js";
@@ -296,10 +302,10 @@ export class BridgeService {
       try {
         state = await this.ensureVkLongPollState(state);
         const check = await this.checkVkLongPoll(state);
-        consecutiveFailures = 0;
 
         if (check.failed) {
           state = await this.handleVkLongPollFailure(state, check);
+          consecutiveFailures = 0;
           continue;
         }
 
@@ -315,10 +321,19 @@ export class BridgeService {
           pts: check.pts ?? state.pts
         };
         await setState("vk_long_poll", state);
+        consecutiveFailures = 0;
       } catch (error) {
         consecutiveFailures += 1;
         await this.logs.error("VK polling failed", error);
-        await sleep(retryDelayMs(consecutiveFailures - 1, config.runtime.retryBaseMs));
+        await sleep(
+          isVkFloodControlError(error)
+            ? retryDelayMs(
+                consecutiveFailures - 1,
+                config.runtime.vkFloodRetryBaseMs,
+                config.runtime.vkFloodRetryMaxMs
+              )
+            : retryDelayMs(consecutiveFailures - 1, config.runtime.retryBaseMs)
+        );
       }
     }
   }
@@ -326,11 +341,17 @@ export class BridgeService {
   private async runMetadataLoop(): Promise<void> {
     while (!this.stopping) {
       await sleep(config.runtime.metadataRefreshMs);
+      if (this.vk.floodCooldownRemainingMs() > 0) continue;
       try {
         const topics = await listActiveTopics();
         for (const topic of topics) {
           const peerId = Number(topic.vk_peer_id);
-          await this.topics.refreshTopicMetadata(peerId);
+          try {
+            await this.topics.refreshTopicMetadata(peerId);
+          } catch (error) {
+            await this.logs.error(`Metadata refresh failed for VK peer ${peerId}`, error);
+            if (isVkFloodControlError(error)) break;
+          }
         }
       } catch (error) {
         await this.logs.error("Metadata refresh failed", error);
@@ -863,6 +884,12 @@ export class BridgeService {
       });
     }
 
+    if (sent.replyFallback) {
+      await this.logs.info(
+        `VK chat ${peerId} rejected reply for Telegram message ${message.message_id}; sent it as an ordinary message`
+      );
+    }
+
     await saveMessageMap({
       vkPeerId: peerId,
       vkMessageId: sent.message_id,
@@ -1070,7 +1097,11 @@ export class BridgeService {
 
     await this.forwardVkMessage(message);
     if (isTopicInfoRefreshAction(message)) {
-      await this.topics.refreshTopicMetadata(message.peer_id, isVkParticipantChangeAction(message));
+      await this.topics.refreshTopicMetadata(
+        message.peer_id,
+        isVkParticipantChangeAction(message),
+        message.action?.type === "chat_photo_remove"
+      );
     }
   }
 
@@ -1428,7 +1459,10 @@ export class BridgeService {
   }
 
   private async forwardVkMessage(message: VkMessage): Promise<void> {
-    const topic = await this.topics.getOrCreateTopic(message.peer_id);
+    const topic = await this.topics.getOrCreateTopic(
+      message.peer_id,
+      message.action?.type === "chat_photo_remove"
+    );
     const senderName = await this.vkMessageSenderName(message);
     const replyToMessageId = await this.vkReplyTarget(message);
     const text = await this.formatVkText(message, senderName);

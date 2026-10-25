@@ -1,8 +1,15 @@
+import { config } from "../config.js";
 import { TelegramClient } from "../telegram/client.js";
 import { truncate } from "../util.js";
 
+interface TelegramLogRepeatState {
+  lastSentAt: number;
+  suppressed: number;
+}
+
 export class LogService {
   private readonly telegramQueue: string[] = [];
+  private readonly telegramRepeats = new Map<string, TelegramLogRepeatState>();
   private flushing = false;
 
   constructor(private readonly telegram: TelegramClient) {}
@@ -20,10 +27,31 @@ export class LogService {
 
   private enqueueTelegram(text: string): void {
     const normalized = truncate(text, 4096);
-    if (this.telegramQueue.at(-1) === normalized) return;
+    const now = Date.now();
+    const previous = this.telegramRepeats.get(normalized);
+    if (previous && now - previous.lastSentAt < config.runtime.logRepeatWindowMs) {
+      previous.suppressed += 1;
+      return;
+    }
+
+    const repeatSummary = previous?.suppressed
+      ? `\nSuppressed ${previous.suppressed} identical Telegram log repeats`
+      : "";
+    this.rememberTelegramLog(normalized, now);
+
+    const queued = truncate(`${normalized}${repeatSummary}`, 4096);
+    if (this.telegramQueue.at(-1) === queued) return;
     if (this.telegramQueue.length >= 100) this.telegramQueue.shift();
-    this.telegramQueue.push(normalized);
+    this.telegramQueue.push(queued);
     void this.flushTelegramQueue();
+  }
+
+  private rememberTelegramLog(text: string, now: number): void {
+    if (!this.telegramRepeats.has(text) && this.telegramRepeats.size >= 500) {
+      const oldest = this.telegramRepeats.keys().next().value;
+      if (oldest !== undefined) this.telegramRepeats.delete(oldest);
+    }
+    this.telegramRepeats.set(text, { lastSentAt: now, suppressed: 0 });
   }
 
   private async flushTelegramQueue(): Promise<void> {

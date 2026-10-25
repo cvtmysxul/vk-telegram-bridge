@@ -11,7 +11,7 @@ export function sleep(ms: number): Promise<void> {
 export function retryDelayMs(attempt: number, baseMs: number, maxMs = 30_000): number {
   const exponential = Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt));
   const jitter = Math.floor(exponential * 0.2 * Math.random());
-  return exponential + jitter;
+  return Math.min(maxMs, exponential + jitter);
 }
 
 export function fetchWithTimeout(

@@ -41,10 +41,24 @@ export function isVkStickerUnavailableError(error: unknown): error is VkApiError
   );
 }
 
+export function isVkFloodControlError(error: unknown): error is VkApiError {
+  return error instanceof VkApiError && error.errorCode === 9;
+}
+
+export function isVkChatForwardDisabledError(error: unknown): error is VkApiError {
+  return (
+    error instanceof VkApiError &&
+    error.method === "messages.send" &&
+    error.errorCode === 994 &&
+    /chat forward disabled/i.test(error.apiMessage)
+  );
+}
+
 interface VkSendResponse {
   message_id?: number;
   conversation_message_id?: number;
   peer_id?: number;
+  replyFallback?: boolean;
 }
 
 interface VkDeleteResponseItem {
@@ -157,8 +171,65 @@ interface VkDocumentUploadResponse {
 
 export class VkClient {
   private readonly apiBase = "https://api.vk.ru/method";
+  private apiQueueTail: Promise<void> = Promise.resolve();
+  private nextApiRequestAt = 0;
+  private floodCooldownUntil = 0;
+  private floodControlFailures = 0;
 
   async api<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    const release = await this.acquireApiQueue();
+    try {
+      await this.waitForApiWindow();
+      const response = await this.performApiRequest<T>(method, params);
+      this.floodControlFailures = 0;
+      this.floodCooldownUntil = 0;
+      return response;
+    } catch (error) {
+      if (isVkFloodControlError(error)) this.registerFloodControl();
+      throw error;
+    } finally {
+      this.nextApiRequestAt = Math.max(
+        this.nextApiRequestAt,
+        Date.now() + config.runtime.vkApiMinIntervalMs
+      );
+      release();
+    }
+  }
+
+  floodCooldownRemainingMs(): number {
+    return Math.max(0, this.floodCooldownUntil - Date.now());
+  }
+
+  private async acquireApiQueue(): Promise<() => void> {
+    const previous = this.apiQueueTail;
+    let release!: () => void;
+    this.apiQueueTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    return release;
+  }
+
+  private async waitForApiWindow(): Promise<void> {
+    const waitMs = Math.max(0, Math.max(this.nextApiRequestAt, this.floodCooldownUntil) - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+  }
+
+  private registerFloodControl(): void {
+    this.floodControlFailures += 1;
+    const cooldownMs = retryDelayMs(
+      this.floodControlFailures - 1,
+      config.runtime.vkFloodRetryBaseMs,
+      config.runtime.vkFloodRetryMaxMs
+    );
+    this.floodCooldownUntil = Math.max(this.floodCooldownUntil, Date.now() + cooldownMs);
+  }
+
+  private async performApiRequest<T>(method: string, params: Record<string, unknown>): Promise<T> {
+    const accessToken =
+      (method === "photos.getMessagesUploadServer" || method === "photos.saveMessagesPhoto")
+        ? config.vk.photoAccessToken || config.vk.accessToken
+        : config.vk.accessToken;
     const form = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === null) continue;
@@ -174,7 +245,7 @@ export class VkClient {
           {
             method: "POST",
             headers: {
-              authorization: `Bearer ${config.vk.accessToken}`,
+              authorization: `Bearer ${accessToken}`,
               "content-type": "application/x-www-form-urlencoded"
             },
             body: form
@@ -275,14 +346,14 @@ export class VkClient {
         { peer_ids: String(peerId), extended: 1 }
       );
       const item = response.items[0];
-      const title = item?.chat_settings?.title || `VK chat ${peerId - 2_000_000_000}`;
+      const title = requiredPeerName(item?.chat_settings?.title, peerId, "chat title");
       return {
         peerId,
         displayName: title,
         title,
-        avatarUrl: bestAvatarUrl(item?.chat_settings?.photo),
+        avatarUrl: bestAvatarUrl(item?.chat_settings?.photo, peerId),
         isChat: true,
-        raw: item ?? {}
+        raw: item
       };
     }
 
@@ -293,14 +364,14 @@ export class VkClient {
         fields: "photo_50,photo_100,photo_200"
       });
       const group = firstVkGroup(response);
-      const title = group?.name || `VK group ${groupId}`;
+      const title = requiredPeerName(group?.name, peerId, "group name");
       return {
         peerId,
         displayName: title,
         title,
-        avatarUrl: bestAvatarUrl(group),
+        avatarUrl: bestAvatarUrl(group, peerId),
         isChat: false,
-        raw: group ?? {}
+        raw: group
       };
     }
 
@@ -311,15 +382,15 @@ export class VkClient {
     const user = response[0];
     const firstName = user?.first_name || "";
     const lastName = user?.last_name || "";
-    const displayName = `${firstName} ${lastName}`.trim() || `VK user ${peerId}`;
+    const displayName = requiredPeerName(`${firstName} ${lastName}`, peerId, "user name");
     return {
       peerId,
       displayName,
       firstName,
       lastName,
-      avatarUrl: bestAvatarUrl(user),
+      avatarUrl: bestAvatarUrl(user, peerId),
       isChat: false,
-      raw: user ?? {}
+      raw: user
     };
   }
 
@@ -361,6 +432,24 @@ export class VkClient {
   }
 
   async sendMessage(input: {
+    peerId: number;
+    text?: string;
+    attachments?: string[];
+    stickerId?: number;
+    replyToMessageId?: number;
+    payload?: string;
+  }): Promise<VkSendResponse> {
+    try {
+      return await this.sendMessageWithInput(input);
+    } catch (error) {
+      if (!input.replyToMessageId || !isVkChatForwardDisabledError(error)) throw error;
+
+      const sent = await this.sendMessageWithInput({ ...input, replyToMessageId: undefined });
+      return { ...sent, replyFallback: true };
+    }
+  }
+
+  private async sendMessageWithInput(input: {
     peerId: number;
     text?: string;
     attachments?: string[];
@@ -539,7 +628,21 @@ export class VkClient {
   }
 
   async uploadMessagePhoto(peerId: number, buffer: Buffer, filename: string, mimeType?: string): Promise<string> {
-    const server = await this.api<{ upload_url: string }>("photos.getMessagesUploadServer", { peer_id: peerId });
+    let server: { upload_url: string };
+    try {
+      server = await this.api<{ upload_url: string }>("photos.getMessagesUploadServer", { peer_id: peerId });
+    } catch (error) {
+      if (
+        !(error instanceof VkApiError) ||
+        error.method !== "photos.getMessagesUploadServer" ||
+        error.errorCode !== 15
+      ) throw error;
+
+      throw new Error(
+        "VK token cannot upload photos to messages. Configure VK_PHOTO_ACCESS_TOKEN with photos permission for the same account, or reauthorize VK_ACCESS_TOKEN with messages and photos permissions and an application that supports photos.getMessagesUploadServer. The image was not sent; document fallback is disabled.",
+        { cause: error }
+      );
+    }
     const uploaded = await uploadMultipart<{ server: number; photo: string; hash: string }>(server.upload_url, {
       fieldName: "photo",
       buffer,
@@ -809,8 +912,23 @@ function* chunks<T>(items: T[], size: number): Generator<T[]> {
   }
 }
 
-function bestAvatarUrl(value: { photo_50?: string; photo_100?: string; photo_200?: string } | undefined): string | undefined {
-  return firstString(value?.photo_200, value?.photo_100, value?.photo_50);
+function bestAvatarUrl(
+  value: { photo_50?: string; photo_100?: string; photo_200?: string } | undefined,
+  peerId: number
+): string | undefined {
+  const fullSize = firstString(value?.photo_200);
+  if (fullSize) return fullSize;
+
+  if (firstString(value?.photo_100, value?.photo_50)) {
+    throw new Error(`VK returned only a low-resolution avatar for peer ${peerId}`);
+  }
+  return undefined;
+}
+
+function requiredPeerName(value: unknown, peerId: number, field: string): string {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (!name) throw new Error(`VK returned incomplete metadata for peer ${peerId}: missing ${field}`);
+  return name;
 }
 
 function bestVideoFileUrl(files: unknown): string | undefined {
@@ -1003,7 +1121,7 @@ async function uploadMultipart<T>(
 }
 
 function isRetryableVkError(code: number): boolean {
-  return code === 1 || code === 6 || code === 9 || code === 10;
+  return code === 1 || code === 6 || code === 10;
 }
 
 function parseVkResponse<T>(text: string): VkResponse<T> {

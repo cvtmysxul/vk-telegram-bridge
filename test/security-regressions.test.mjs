@@ -45,6 +45,79 @@ test("configuration rejects malformed or unsafe numeric values", () => {
   assertConfigFailure({ TELEGRAM_MAX_ACTIVE_TOPICS: "0" }, /Invalid positive integer env var TELEGRAM_MAX_ACTIVE_TOPICS/);
   assertConfigFailure({ NETWORK_MAX_RETRIES: "-1" }, /Invalid non-negative integer env var NETWORK_MAX_RETRIES/);
   assertConfigFailure({ NETWORK_REQUEST_TIMEOUT_MS: "0" }, /Invalid positive integer env var NETWORK_REQUEST_TIMEOUT_MS/);
+  assertConfigFailure({ VK_API_MIN_INTERVAL_MS: "-1" }, /Invalid non-negative integer env var VK_API_MIN_INTERVAL_MS/);
+  assertConfigFailure(
+    { VK_FLOOD_RETRY_BASE_MS: "200", VK_FLOOD_RETRY_MAX_MS: "100" },
+    /VK_FLOOD_RETRY_MAX_MS must be greater than or equal to VK_FLOOD_RETRY_BASE_MS/
+  );
+});
+
+test("VK Flood Control is not retried in a tight loop and pauses the shared API queue", () => {
+  const output = runWithConfig(
+    {
+      NETWORK_MAX_RETRIES: "3",
+      VK_API_MIN_INTERVAL_MS: "50",
+      VK_FLOOD_RETRY_BASE_MS: "30",
+      VK_FLOOD_RETRY_MAX_MS: "30"
+    },
+    [
+      "const { VkClient } = await import('./dist/vk/client.js');",
+      "let calls = 0;",
+      "globalThis.fetch = async () => { calls += 1; return new Response(JSON.stringify(calls === 1 ? { error: { error_code: 9, error_msg: 'Flood control' } } : { response: { ok: true } })); };",
+      "const client = new VkClient();",
+      "await client.api('messages.getLongPollServer').catch(() => undefined);",
+      "const started = Date.now();",
+      "await client.api('groups.getById');",
+      "console.log(JSON.stringify({ calls, waitedAtLeast45Ms: Date.now() - started >= 45, floodCooldownCleared: client.floodCooldownRemainingMs() === 0 }));"
+    ].join(" ")
+  );
+
+  assert.equal(output, '{"calls":2,"waitedAtLeast45Ms":true,"floodCooldownCleared":true}');
+});
+
+test("VK API requests are serialized across concurrent bridge work", () => {
+  const output = runWithConfig(
+    { NETWORK_MAX_RETRIES: "0", VK_API_MIN_INTERVAL_MS: "0" },
+    [
+      "const { VkClient } = await import('./dist/vk/client.js');",
+      "let active = 0; let maxActive = 0;",
+      "globalThis.fetch = async () => { active += 1; maxActive = Math.max(maxActive, active); await new Promise((resolve) => setTimeout(resolve, 10)); active -= 1; return new Response(JSON.stringify({ response: { ok: true } })); };",
+      "const client = new VkClient();",
+      "await Promise.all([client.api('users.get'), client.api('groups.getById'), client.api('messages.getLongPollServer')]);",
+      "console.log(JSON.stringify({ maxActive }));"
+    ].join(" ")
+  );
+
+  assert.equal(output, '{"maxActive":1}');
+});
+
+test("VK polling preserves its failure streak until Long Poll recovery succeeds", async () => {
+  const bridgeService = await readFile(resolve(root, "src/services/bridgeService.ts"), "utf8");
+  const check = bridgeService.indexOf("const check = await this.checkVkLongPoll(state);");
+  const recovery = bridgeService.indexOf("state = await this.handleVkLongPollFailure(state, check);", check);
+  const reset = bridgeService.indexOf("consecutiveFailures = 0;", check);
+
+  assert.ok(check >= 0 && recovery > check && reset > recovery);
+  assert.match(bridgeService, /if \(this\.vk\.floodCooldownRemainingMs\(\) > 0\) continue;/);
+  assert.match(bridgeService, /if \(isVkFloodControlError\(error\)\) break;/);
+});
+
+test("alternating identical Telegram logs are coalesced", () => {
+  const output = runWithConfig(
+    { LOG_REPEAT_WINDOW_MS: "1000" },
+    [
+      "const { LogService } = await import('./dist/services/logService.js');",
+      "const sent = []; const telegram = { sendMessage: async (message) => { sent.push(message.text); } };",
+      "const logs = new LogService(telegram);",
+      "await logs.error('VK polling failed', new Error('Flood control'));",
+      "await logs.error('Metadata refresh failed', new Error('Flood control'));",
+      "await logs.error('VK polling failed', new Error('Flood control'));",
+      "await new Promise((resolve) => setTimeout(resolve, 10));",
+      "console.log(JSON.stringify({ sent: sent.length }));"
+    ].join(" ")
+  );
+
+  assert.equal(output, '{"sent":2}');
 });
 
 test("remote reads stop before accumulating past the configured byte limit", async () => {
@@ -115,6 +188,260 @@ test("Telegram topic metadata is not relayed as an unsupported attachment", () =
   );
 
   assert.equal(output, "none");
+});
+
+test("renaming a topic leaves its manually selected icon untouched", async () => {
+  const topicService = await readFile(resolve(root, "src/services/topicService.ts"), "utf8");
+
+  assert.match(
+    topicService,
+    /if \(input\.currentName !== input\.name\) await this\.telegram\.editForumTopic\(input\.threadId, input\.name\);/
+  );
+  assert.doesNotMatch(topicService, /iconSyncedThreads/);
+});
+
+test("an extra stale topic-info record does not recreate a current profile pin", () => {
+  const output = runWithConfig(
+    {},
+    [
+      "const { countCurrentTopicInfoMessages, hasCurrentTopicInfoMessages } = await import('./dist/services/topicService.js');",
+      "const current = JSON.stringify({ type: 'VK-чат', displayName: 'Чат', avatarUrl: '/avatar.jpg' });",
+      "const stale = JSON.stringify({ type: 'VK-чат', displayName: 'Старое имя', avatarUrl: '/avatar.jpg' });",
+      "const messages = [{ snapshot: current, telegramThreadId: 42 }, { snapshot: stale, telegramThreadId: 42 }];",
+      "console.log(hasCurrentTopicInfoMessages(countCurrentTopicInfoMessages(messages, { snapshot: current, threadId: 42 }), 1));",
+      "const { pool } = await import('./dist/db.js');",
+      "await pool.end();"
+    ].join(" ")
+  );
+
+  assert.equal(output, "true");
+});
+
+test("incomplete VK names and low-resolution avatar fallbacks are rejected", () => {
+  const output = runWithConfig(
+    {},
+    [
+      "const { VkClient } = await import('./dist/vk/client.js');",
+      "const errors = [];",
+      "const missingName = new VkClient();",
+      "missingName.api = async () => [{ id: 7, photo_200: 'https://cdn.example/avatar-200.jpg' }];",
+      "try { await missingName.getPeerInfo(7); } catch (error) { errors.push(error.message); }",
+      "const lowResolution = new VkClient();",
+      "lowResolution.api = async () => [{ id: 8, first_name: 'Иван', last_name: 'Иванов', photo_50: 'https://cdn.example/avatar-50.jpg' }];",
+      "try { await lowResolution.getPeerInfo(8); } catch (error) { errors.push(error.message); }",
+      "console.log(JSON.stringify(errors));"
+    ].join(" ")
+  );
+
+  assert.equal(
+    output,
+    '["VK returned incomplete metadata for peer 7: missing user name","VK returned only a low-resolution avatar for peer 8"]'
+  );
+});
+
+test("a metadata change must be identical in five VK responses", async () => {
+  const output = runWithConfig(
+    {},
+    [
+      "const { peerInfoMetadataEqual } = await import('./dist/services/topicService.js');",
+      "const base = { peerId: 7, displayName: 'Иван Иванов', avatarUrl: 'https://cdn.example/avatar.jpg?token=one', isChat: false, raw: {} };",
+      "const same = { ...base, avatarUrl: 'https://cdn.example/avatar.jpg?token=two' };",
+      "const badName = { ...base, displayName: 'VK user 7' };",
+      "const missingAvatar = { ...base, avatarUrl: undefined };",
+      "console.log(JSON.stringify([peerInfoMetadataEqual(base, same), peerInfoMetadataEqual(base, badName), peerInfoMetadataEqual(base, missingAvatar)]));",
+      "const { pool } = await import('./dist/db.js');",
+      "await pool.end();"
+    ].join(" ")
+  );
+
+  assert.equal(output, "[true,false,false]");
+
+  const topicService = await readFile(resolve(root, "src/services/topicService.ts"), "utf8");
+  assert.match(topicService, /const VK_METADATA_CONFIRMATION_SAMPLES = 5;/);
+  assert.match(topicService, /sample < VK_METADATA_CONFIRMATION_SAMPLES/);
+  assert.match(topicService, /confirmation = await this\.vk\.getPeerInfo\(peerId\);/);
+  assert.match(topicService, /if \(!peerInfoMetadataEqual\(candidate, confirmation\)\)/);
+  assert.match(topicService, /!allowAvatarRemoval[\s\S]*!candidate\.avatarUrl/);
+});
+
+test("a failed replacement keeps the previous profile pin", async () => {
+  const [topicService, repositories] = await Promise.all([
+    readFile(resolve(root, "src/services/topicService.ts"), "utf8"),
+    readFile(resolve(root, "src/repositories.ts"), "utf8")
+  ]);
+  const sendNew = topicService.indexOf("const sent = await input.send();");
+  const unpinPrevious = topicService.indexOf("for (const message of previous)", sendNew);
+
+  assert.ok(sendNew >= 0 && unpinPrevious > sendNew);
+  assert.match(topicService, /await replaceTopicInfoMessages\(input\.peer\.peerId, input\.kind, records\);/);
+  assert.doesNotMatch(topicService, /sending profile text instead/);
+  assert.match(repositories, /await db\.transaction\(async \(transaction\) =>/);
+});
+
+test("a VK chat that forbids forwarded replies receives the Telegram text without its reply link", () => {
+  const output = runWithConfig(
+    {},
+    [
+      "const { VkApiError, VkClient } = await import('./dist/vk/client.js');",
+      "const client = new VkClient();",
+      "const calls = [];",
+      "client.api = async (_method, params) => { calls.push(params); if (calls.length === 1) throw new VkApiError('messages.send', 994, 'Chat forward disabled'); return { message_id: 10, conversation_message_id: 20, peer_id: params.peer_id }; };",
+      "const sent = await client.sendMessage({ peerId: 2000000001, text: 'Тест', replyToMessageId: 9 });",
+      "console.log(JSON.stringify({ replies: calls.map((call) => call.reply_to ?? null), replyFallback: sent.replyFallback }));"
+    ].join(" ")
+  );
+
+  assert.equal(output, '{"replies":[9,null],"replyFallback":true}');
+});
+
+test("Telegram URL fetch rejection retries a profile photo as multipart with its caption and topic", () => {
+  runWithConfig({}, `
+    import assert from 'node:assert/strict';
+    const { TelegramClient } = await import('./dist/telegram/client.js');
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, init });
+      if (calls.length === 1) return Response.json({ ok: false, error_code: 400, description: 'Bad Request: failed to get HTTP URL content' }, { status: 400 });
+      if (calls.length === 2) return new Response(Buffer.from('image-bytes'), { headers: { 'content-type': 'image/jpeg' } });
+      return Response.json({ ok: true, result: { message_id: 12 } });
+    };
+    const sent = await new TelegramClient().sendPhoto({ file: 'https://cdn.example/avatar.jpg', filename: 'vk-avatar.jpg', caption: 'Профиль', message_thread_id: 42, reply_to_message_id: 8, disable_notification: true });
+    assert.equal(sent.message_id, 12);
+    assert.equal(calls.length, 3);
+    assert.equal(calls[1].url, 'https://cdn.example/avatar.jpg');
+    const form = calls[2].init.body;
+    assert.ok(form instanceof FormData);
+    assert.equal(await form.get('photo').text(), 'image-bytes');
+    assert.equal(form.get('photo').name, 'vk-avatar.jpg');
+    assert.equal(form.get('photo').type, 'image/jpeg');
+    assert.equal(form.get('caption'), 'Профиль');
+    assert.equal(form.get('message_thread_id'), '42');
+    assert.equal(form.get('disable_notification'), 'true');
+    assert.deepEqual(JSON.parse(form.get('reply_parameters')), { message_id: 8, allow_sending_without_reply: true });
+  `);
+});
+
+test("Telegram does not resend photos after ambiguous failures or unrelated rejections", () => {
+  runWithConfig({}, `
+    import assert from 'node:assert/strict';
+    const { TelegramClient } = await import('./dist/telegram/client.js');
+    for (const failure of ['network', 'Bad Request: message thread not found']) {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls++;
+        if (failure === 'network') throw new Error('connection reset');
+        return Response.json({ ok: false, error_code: 400, description: failure }, { status: 400 });
+      };
+      await assert.rejects(new TelegramClient().sendPhoto({ file: 'https://cdn.example/avatar.jpg' }));
+      assert.equal(calls, 1);
+    }
+  `);
+});
+
+test("Telegram photo fallback respects download failures and byte limits", () => {
+  runWithConfig({ MEDIA_MAX_DOWNLOAD_BYTES: "4" }, `
+    import assert from 'node:assert/strict';
+    const { config } = await import('./dist/config.js');
+    config.media.maxDownloadBytes = 4;
+    const { TelegramClient } = await import('./dist/telegram/client.js');
+    for (const status of [403, 200]) {
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls++;
+        if (calls === 1) return Response.json({ ok: false, error_code: 400, description: 'Bad Request: failed to get HTTP URL content' });
+        return new Response('too-large', { status });
+      };
+      await assert.rejects(new TelegramClient().sendPhoto({ file: 'https://cdn.example/avatar.jpg' }), status === 403 ? /HTTP 403/ : /exceeds configured limit/);
+      assert.equal(calls, 2);
+    }
+  `);
+});
+
+test("VK keeps the photo upload path when allowed and never falls back after an uncertain upload", () => {
+  runWithConfig({ NETWORK_MAX_RETRIES: '0' }, `
+    import assert from 'node:assert/strict';
+    const { VkClient, VkApiError } = await import('./dist/vk/client.js');
+    const client = new VkClient();
+    let documentCalls = 0;
+    client.uploadMessageDocument = async () => { documentCalls++; return 'doc7_12'; };
+    client.api = async (method) => method === 'photos.getMessagesUploadServer' ? { upload_url: 'https://upload.example/photo' } : [{ owner_id: 7, id: 12 }];
+    globalThis.fetch = async () => Response.json({ server: 1, photo: 'uploaded-photo', hash: 'hash' });
+    assert.equal(await client.uploadMessagePhoto(7, Buffer.from('image'), 'photo.jpg'), 'photo7_12');
+    globalThis.fetch = async () => { throw new Error('connection reset'); };
+    await assert.rejects(client.uploadMessagePhoto(7, Buffer.from('image'), 'photo.jpg'));
+    client.api = async (method) => { throw new VkApiError(method, 9, 'Flood control'); };
+    await assert.rejects(client.uploadMessagePhoto(7, Buffer.from('image'), 'photo.jpg'), /Flood control/);
+    assert.equal(documentCalls, 0);
+  `);
+});
+
+test("VK photo scope denial never substitutes a document and explains the required access", () => {
+  runWithConfig({}, `
+    import assert from 'node:assert/strict';
+    const { VkClient, VkApiError } = await import('./dist/vk/client.js');
+    const client = new VkClient();
+    const denied = new VkApiError('photos.getMessagesUploadServer', 15, 'Access denied: no access to call this method. It cannot be called with current scopes.');
+    const methods = [];
+    let documentCalls = 0;
+    let uploadCalls = 0;
+    client.api = async (method) => { methods.push(method); throw denied; };
+    client.uploadMessageDocument = async () => { documentCalls++; return 'doc7_12'; };
+    globalThis.fetch = async () => { uploadCalls++; throw new Error('Unexpected upload'); };
+    await assert.rejects(client.uploadMessagePhoto(7, Buffer.from('image'), 'photo.jpg'), (error) => {
+      assert.match(error.message, /Configure VK_PHOTO_ACCESS_TOKEN with photos permission for the same account/);
+      assert.equal(error.cause, denied);
+      return true;
+    });
+    assert.deepEqual(methods, ['photos.getMessagesUploadServer']);
+    assert.equal(documentCalls, 0);
+    assert.equal(uploadCalls, 0);
+  `);
+});
+
+test("a secondary photo token uploads and saves a photo while messaging keeps the primary token", () => {
+  runWithConfig({ VK_PHOTO_ACCESS_TOKEN: 'test-photo-token', VK_API_MIN_INTERVAL_MS: '0' }, `
+    import assert from 'node:assert/strict';
+    const { VkClient } = await import('./dist/vk/client.js');
+    const client = new VkClient();
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      const method = url.split('/').pop();
+      calls.push(method);
+      if (url === 'https://upload.example/photo') {
+        assert.equal(await init.body.get('photo').text(), 'image-bytes');
+        return Response.json({ server: 1, photo: 'saved-image', hash: 'hash' });
+      }
+      const photoMethod = ['photos.getMessagesUploadServer', 'photos.saveMessagesPhoto'].includes(method);
+      assert.equal(init.headers.authorization, 'Bearer ' + (photoMethod ? 'test-photo-token' : 'test-vk-token'));
+      if (method === 'photos.getMessagesUploadServer') return Response.json({ response: { upload_url: 'https://upload.example/photo' } });
+      if (method === 'photos.saveMessagesPhoto') return Response.json({ response: [{ owner_id: 7, id: 12, access_key: 'key' }] });
+      if (method === 'messages.send') {
+        assert.equal(init.body.get('attachment'), 'photo7_12_key');
+        return Response.json({ response: { message_id: 55, conversation_message_id: 12, peer_id: 7 } });
+      }
+      return Response.json({ response: {} });
+    };
+    const attachment = await client.uploadMessagePhoto(7, Buffer.from('image-bytes'), 'photo.jpg');
+    assert.equal(attachment, 'photo7_12_key');
+    await client.sendMessage({ peerId: 7, attachments: [attachment] });
+    await client.api('messages.getLongPollServer');
+    await client.api('docs.getMessagesUploadServer');
+    assert.deepEqual(calls, ['photos.getMessagesUploadServer', 'photo', 'photos.saveMessagesPhoto', 'messages.send', 'messages.getLongPollServer', 'docs.getMessagesUploadServer']);
+  `);
+});
+
+test("photo uploads use the primary token when no secondary token is configured", () => {
+  runWithConfig({ VK_PHOTO_ACCESS_TOKEN: '', VK_API_MIN_INTERVAL_MS: '0' }, `
+    import assert from 'node:assert/strict';
+    const { VkClient } = await import('./dist/vk/client.js');
+    globalThis.fetch = async (_url, init) => {
+      assert.equal(init.headers.authorization, 'Bearer test-vk-token');
+      return Response.json({ response: {} });
+    };
+    const client = new VkClient();
+    await client.api('photos.getMessagesUploadServer');
+    await client.api('photos.saveMessagesPhoto');
+  `);
 });
 
 function configSslMode(overrides) {

@@ -73,6 +73,11 @@ const mediaMaxTgsDecompressedBytes = positiveIntEnv(
   "MEDIA_MAX_TGS_DECOMPRESSED_BYTES",
   mediaMaxDownloadBytes
 );
+const vkFloodRetryBaseMs = positiveIntEnv("VK_FLOOD_RETRY_BASE_MS", 15 * 60 * 1000);
+const vkFloodRetryMaxMs = positiveIntEnv("VK_FLOOD_RETRY_MAX_MS", 2 * 60 * 60 * 1000);
+if (vkFloodRetryMaxMs < vkFloodRetryBaseMs) {
+  throw new Error("VK_FLOOD_RETRY_MAX_MS must be greater than or equal to VK_FLOOD_RETRY_BASE_MS");
+}
 
 export const config = {
   databaseUrl,
@@ -99,6 +104,7 @@ export const config = {
   },
   vk: {
     accessToken: required("VK_ACCESS_TOKEN"),
+    photoAccessToken: process.env.VK_PHOTO_ACCESS_TOKEN?.trim() || undefined,
     apiVersion: process.env.VK_API_VERSION || "5.199",
     longPollVersion: positiveIntEnv("VK_LONG_POLL_VERSION", 21),
     longPollWaitSeconds: positiveIntEnv("VK_LONG_POLL_WAIT_SECONDS", 25)
@@ -112,7 +118,11 @@ export const config = {
   },
   runtime: {
     retryBaseMs: positiveIntEnv("POLL_RETRY_BASE_MS", 1000),
+    vkApiMinIntervalMs: nonNegativeIntEnv("VK_API_MIN_INTERVAL_MS", 350),
+    vkFloodRetryBaseMs,
+    vkFloodRetryMaxMs,
     metadataRefreshMs: positiveIntEnv("METADATA_REFRESH_MS", 10 * 60 * 1000),
+    logRepeatWindowMs: positiveIntEnv("LOG_REPEAT_WINDOW_MS", 5 * 60 * 1000),
     requestTimeoutMs: positiveIntEnv("NETWORK_REQUEST_TIMEOUT_MS", 30_000),
     mediaTimeoutMs: positiveIntEnv("NETWORK_MEDIA_TIMEOUT_MS", 120_000),
     maxNetworkRetries: nonNegativeIntEnv("NETWORK_MAX_RETRIES", 3)
