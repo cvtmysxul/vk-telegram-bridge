@@ -444,6 +444,80 @@ test("photo uploads use the primary token when no secondary token is configured"
   `);
 });
 
+test("new VK messages recover bottom keyboards and preserve button payloads", () => {
+  runWithConfig({}, `
+    import assert from 'node:assert/strict';
+    const { BridgeService, prepareVkKeyboard } = await import('./dist/services/bridgeService.js');
+    const { VkClient } = await import('./dist/vk/client.js');
+    const { pool } = await import('./dist/db.js');
+    const payload = JSON.stringify({ m: 'menu', t: 'Запчасти' });
+    const keyboard = { inline: false, author_id: -42, buttons: [[{ action: { type: 'text', label: 'Запчасти', payload } }]] };
+    const vk = new VkClient();
+    let lookups = 0;
+    let current = keyboard;
+    vk.api = async (method, params) => {
+      assert.equal(method, 'messages.getConversationsById');
+      assert.deepEqual(params, { peer_ids: '-42' });
+      lookups++;
+      return { items: [{ peer: { id: -99 }, current_keyboard: keyboard }, { peer: { id: -42 }, current_keyboard: current }] };
+    };
+    let source;
+    let forwarded;
+    const errors = [];
+    vk.getMessageById = async () => ({ ...source });
+    const bridge = new BridgeService({}, vk, {}, { error: async (...args) => errors.push(args) }, {});
+    bridge.forwardVkMessage = async message => { forwarded = message; };
+    const incoming = { id: 12, peer_id: -42, from_id: -42, text: 'Выберите тему', out: 0 };
+    source = incoming;
+    await bridge.handleVkUpdate([4, 12]);
+    assert.equal(lookups, 1);
+    const prepared = prepareVkKeyboard(forwarded);
+    assert.equal(prepared.replyMarkup.inline_keyboard[0][0].text, 'Запчасти');
+    assert.match(prepared.replyMarkup.inline_keyboard[0][0].callback_data, /^vkb:/);
+    assert.deepEqual(prepared.actions[0], { id: prepared.actions[0].id, actionType: 'text', label: 'Запчасти', payload, vkInline: false, vkAuthorId: -42 });
+    source = { ...incoming, keyboard: { buttons: [] } };
+    await bridge.handleVkUpdate([4, 12]);
+    assert.equal(lookups, 1);
+    assert.equal(prepareVkKeyboard(forwarded), undefined);
+    source = { ...incoming, keyboard: { ...keyboard, inline: true } };
+    await bridge.handleVkUpdate([4, 12]);
+    assert.equal(lookups, 1);
+    assert.equal(prepareVkKeyboard(forwarded).actions[0].vkInline, true);
+    source = incoming;
+    for (const value of [undefined, { ...keyboard, author_id: -99 }, { ...keyboard, inline: true }, JSON.stringify(keyboard)]) {
+      current = value;
+      await bridge.handleVkUpdate([4, 12]);
+      assert.equal(Boolean(prepareVkKeyboard(forwarded)), typeof value === 'string');
+    }
+    vk.getCurrentKeyboard = async () => { throw new Error('VK unavailable'); };
+    await bridge.handleVkUpdate([4, 12]);
+    assert.equal(forwarded.text, incoming.text);
+    assert.equal(errors.length, 1);
+    source = { ...incoming, out: 1 };
+    forwarded = undefined;
+    await bridge.handleVkUpdate([4, 12]);
+    assert.equal(forwarded, undefined);
+    await pool.end();
+  `);
+});
+
+test("VK text button sends its label and original payload together", () => {
+  runWithConfig({}, `
+    import assert from 'node:assert/strict';
+    const { VkClient } = await import('./dist/vk/client.js');
+    const vk = new VkClient();
+    const payload = '{"m":"menu","t":"Запчасти"}';
+    vk.api = async (method, params) => {
+      assert.equal(method, 'messages.send');
+      assert.equal(params.peer_id, -42);
+      assert.equal(params.message, 'Запчасти');
+      assert.equal(params.payload, payload);
+      return 123;
+    };
+    await vk.sendMessage({ peerId: -42, text: 'Запчасти', payload });
+  `);
+});
+
 function configSslMode(overrides) {
   return runWithConfig(overrides, "const { config } = await import('./dist/config.js'); console.log(config.database.sslMode);");
 }

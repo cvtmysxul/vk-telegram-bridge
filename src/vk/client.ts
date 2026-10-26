@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { VkAttachment, VkChatParticipant, VkLongPollServer, VkMessage, VkPeerInfo } from "../types.js";
+import { VkAttachment, VkChatParticipant, VkKeyboard, VkLongPollServer, VkMessage, VkPeerInfo } from "../types.js";
 import {
   fetchWithTimeout,
   fileNameFromUrl,
@@ -296,6 +296,13 @@ export class VkClient {
       extended: 1
     });
     return response.items[0];
+  }
+
+  async getCurrentKeyboard(peerId: number): Promise<VkKeyboard | string | undefined> {
+    const response = await this.api<{
+      items: Array<{ peer: { id: number }; current_keyboard?: VkKeyboard | string }>;
+    }>("messages.getConversationsById", { peer_ids: String(peerId) });
+    return response.items.find((conversation) => conversation.peer.id === peerId)?.current_keyboard;
   }
 
   async getMessageByConversationMessageId(peerId: number, conversationMessageId: number): Promise<VkMessage | undefined> {

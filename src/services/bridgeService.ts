@@ -1083,6 +1083,23 @@ export class BridgeService {
       if (this.consumeSuppressedVkSystemAction(message.peer_id, message.action.type)) return;
     }
 
+    // VK stores bottom keyboards on the conversation, independently of the message.
+    // Only consult current state for new incoming messages, never history or edits.
+    if (message.keyboard === undefined && !message.action) {
+      try {
+        const keyboard = await this.vk.getCurrentKeyboard(message.peer_id);
+        const parsed = parseVkKeyboard(keyboard);
+        if (
+          parsed && parsed.inline !== true &&
+          (parsed.author_id === undefined || parsed.author_id === message.from_id)
+        ) {
+          message.keyboard = keyboard;
+        }
+      } catch (error) {
+        await this.logs.error(`Cannot load VK keyboard for peer ${message.peer_id}`, error);
+      }
+    }
+
     if (this.isVkPinAction(message)) {
       await this.handleVkPin(message);
       await this.forwardVkMessage(message);
@@ -2617,7 +2634,7 @@ function isValidVkPinPeerId(value: number | undefined): value is number {
   return value !== undefined && Number.isSafeInteger(value) && (value < 0 || value > 2_000_000_000);
 }
 
-function prepareVkKeyboard(message: VkMessage): PreparedVkKeyboard | undefined {
+export function prepareVkKeyboard(message: VkMessage): PreparedVkKeyboard | undefined {
   const sources = vkButtonRowSources(message);
   if (!sources.length) return undefined;
 
